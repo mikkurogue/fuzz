@@ -1,4 +1,6 @@
-use std::{any::Any, collections::HashMap};
+use std::collections::HashMap;
+
+use ariadne::{Color, Label, Report, ReportKind, Source};
 
 pub struct Fuzz {
     /// The target string to find within input location(s)
@@ -18,19 +20,51 @@ pub struct Location {
     pub column: usize,
 }
 
+const NEW_LINE: usize = 1;
+const LINE_LOCATION_OFFSET: usize = 1;
+const COLUMN_LOCATION_OFFSET: usize = 1;
+
 impl Fuzz {
     pub fn new(input: String) -> Self {
         Fuzz { input }
+    }
+
+    fn build_report(&self, content: &String, file_name: String, result: &TargetResult) {
+        let byte_offset = content
+            .lines()
+            .take(result.location.line - LINE_LOCATION_OFFSET)
+            .map(|line| line.len() + NEW_LINE)
+            .sum::<usize>()
+            + result.location.column
+            - COLUMN_LOCATION_OFFSET;
+
+        Report::build(
+            ReportKind::Custom("Found", Color::Magenta),
+            (
+                file_name.clone(),
+                byte_offset..byte_offset + self.input.len(),
+            ),
+        )
+        .with_message("Reference found")
+        .with_label(
+            Label::new((
+                file_name.clone(),
+                byte_offset..byte_offset + self.input.len(),
+            ))
+            .with_message("referenced here")
+            .with_color(Color::Cyan),
+        )
+        .finish()
+        .eprint((file_name, Source::from(content)))
+        .expect("Failed to print report");
     }
 
     pub fn run(&self) {
         let results = FileAnalsis::results(self.input.clone());
 
         for (file_name, result) in results {
-            println!(
-                "Found target in file: {}, at line: {}, column: {}",
-                file_name, result.location.line, result.location.column
-            );
+            let content = FileAnalsis::open_file(&file_name).unwrap_or_default();
+            self.build_report(&content, file_name, &result);
         }
     }
 }
@@ -38,12 +72,16 @@ impl Fuzz {
 struct FileAnalsis;
 impl FileAnalsis {
     /// Opens a file and reads its contents into a string
-    /// TODO: Convert to str and do something with a stream
     fn open_file(input_file: &String) -> anyhow::Result<String> {
         let file = std::fs::read_to_string(input_file)?;
         Ok(file)
     }
 
+    /// Walks current directory recursively and analyzes each file for the target text
+    /// and parses this to a hashmap of results.
+    /// For each file a TargetResult is created and stored in the hashmap with the file name as key.
+    /// If multiple occurrences are found in a file, only the last one is stored. Maybe this should
+    /// be a vec instead
     fn results(target_text: String) -> HashMap<String, TargetResult> {
         let walker = walkdir::WalkDir::new(".").into_iter();
 
