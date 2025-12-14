@@ -7,6 +7,7 @@ pub struct Cli {}
 
 fn main() {
     let fuzz = fuzz::Fuzz::new("sample idea".to_string());
+    // sample idea
 
     fuzz.run();
 }
