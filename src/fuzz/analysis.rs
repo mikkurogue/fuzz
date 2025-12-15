@@ -45,8 +45,15 @@ impl FileAnalysis {
     fn read_gitignore() -> Vec<String> {
         let mut ignores = Vec::new();
 
-        if let Ok(content) = Self::open_file(&".gitignore".to_string()) {
-            for line in content.lines() {
+        if let Ok(git_ignore_content) = Self::open_file(&".gitignore".to_string()) {
+            for line in git_ignore_content.lines() {
+                ignores.push(line.to_string());
+            }
+        }
+
+        // do the same but for custom .fuzzignore file in the cwd
+        if let Ok(fuzz_ignore_content) = Self::open_file(&".fuzzignore".to_string()) {
+            for line in fuzz_ignore_content.lines() {
                 ignores.push(line.to_string());
             }
         }
